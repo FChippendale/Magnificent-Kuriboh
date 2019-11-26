@@ -7,6 +7,39 @@ import numpy as np
 import sys
 import ctypes
 
+def Rotate(x_theta, y_theta, z_theta):
+    x_rot_matrix = np.array([[1, 0, 0, 0],
+                             [0, np.cos(x_theta), -np.sin(x_theta), 0],
+                             [0, np.sin(x_theta), np.cos(x_theta), 0],
+                             [0, 0, 0, 1]])
+    
+    y_rot_matrix = np.array([[np.cos(y_theta), 0, np.sin(y_theta), 0],
+                             [0, 1, 0, 0],
+                             [-np.sin(y_theta), 0, np.cos(y_theta), 0],
+                             [0, 0, 0, 1]])
+    
+    z_rot_matrix = np.array([[np.cos(z_theta), -np.sin(z_theta), 0, 0],
+                             [np.sin(z_theta), np.cos(z_theta), 0, 0],
+                             [0, 0, 1, 0],
+                             [0, 0, 0, 1]])
+    return np.matmul(x_rot_matrix, np.matmul(y_rot_matrix, z_rot_matrix))
+
+def Translation(dx, dy, dz):
+    translation_matrix = np.array([[1, 0, 0, 0],
+                                   [0, 1, 0, 0], 
+                                   [0, 0, 1, 0],
+                                   [dx, dy, dz, 1]])
+    return translation_matrix
+
+def Perspective(alpha):
+    NearZ = 0.1
+    FarZ = 50
+    persp_matrix = np.array([[1/(display[0]/display[1] * np.tan(alpha / 2)), 0, 0, 0],
+                             [0, 1/np.tan(alpha / 2), 0, 0], 
+                             [0, 0, (-NearZ-FarZ)/(NearZ-FarZ), 2 * NearZ * FarZ / (NearZ-FarZ)],
+                             [0, 0, 1, 0]])
+    return persp_matrix
+    
 
 def loadImage():
     img = pygame.image.load("Texture_Test.png")
@@ -27,16 +60,6 @@ screen = pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
 
 glEnable(GL_DEPTH_TEST)
 
-glMatrixMode(GL_PROJECTION)
-gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
-
-glMatrixMode(GL_MODELVIEW)
-gluLookAt(0, -8, 0, 0, 0, 0, 0, 0, 1) #(first 3 are starting pos, second three are reference point, third three are direction of 'up')
-viewMatrix = glGetFloatv(GL_MODELVIEW_MATRIX)
-glLoadIdentity()
-
-loadImage()
-
 pygame.event.get()
 pygame.mouse.get_rel()
 pygame.mouse.set_visible(0)
@@ -48,19 +71,13 @@ up_down_mouseMove = 0
 
 triangle = [-1.0, -0.5, 0.0,
             1.0, -0.5, 0.0,
-            -1.0, 0.5, 0.0,
-            -1.0, 0.5, 0.0,
-            1.0, 0.5, 0.0,
-            1.0, -0.5, 0.0]
+            -1.0, 0.5, 0.0]
 
 triangle = np.array(triangle, dtype = np.float32)
 
 colors = [0.0, 0.0, 1.0, 
           0.0, 0.0, 1.0, 
-          0.0, 0.0, 1.0, 
-          0.0, 1.0, 0.0, 
-          0.0, 1.0, 0.0, 
-          0.0, 1.0, 0.0]
+          0.0, 0.0, 1.0]
 
 colors = np.array(colors, dtype = np.float32)
 
@@ -103,18 +120,16 @@ glBufferSubData(GL_ARRAY_BUFFER, sys.getsizeof(triangle), sys.getsizeof(colors),
 
 position = glGetAttribLocation(shader, "position")
 glVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, 0, None)
+glEnableVertexAttribArray(position)
 
 view_matrix = glGetUniformLocation(shader, "view_matrix")
-glVertexAttribPointer(view_matrix, 3, GL_FLOAT, GL_FALSE, 0, None)
-glEnableVertexAttribArray(view_matrix)
 
 color_attribute = glGetAttribLocation(shader, "color")
 glVertexAttribPointer(color_attribute, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(sys.getsizeof(triangle)))
 glEnableVertexAttribArray(color_attribute)
 
-glEnableVertexAttribArray(position)
-
 glUseProgram(shader)
+
 
 cur_pos = [0, -8] #X Z
 
@@ -126,8 +141,7 @@ while True:
             if event.key == pygame.K_ESCAPE: pygame.quit(), sys.exit()
         if event.type == pygame.MOUSEMOTION:
             mouseMove = event.rel
-            
-            
+                
                
     if mouseMove[0] == prev_mouseMove[0]:
         mouseMove = (0, mouseMove[1])
@@ -138,44 +152,30 @@ while True:
     prev_mouseMove = mouseMove
     
     keypress = pygame.key.get_pressed() 
-    glLoadIdentity() 
-    
-    glRotatef(up_down_mouseMove*0.1, 1.0, 0.0, 0.0)
 
-    # init the view matrix
-    glPushMatrix()
-    glLoadIdentity()
+
 
     # apply the movment 
     if keypress[pygame.K_w]:
         cur_pos[1] += 0.1
-        glTranslatef(0,0,0.1)
     if keypress[pygame.K_s]:
         cur_pos[1] -= 0.1
-        glTranslatef(0,0,-0.1)
     if keypress[pygame.K_d]:
         cur_pos[0] += 0.1
-        glTranslatef(-0.1,0,0)
     if keypress[pygame.K_a]:
         cur_pos[0] -= 0.1
-        glTranslatef(0.1,0,0)
     
-    glRotatef(mouseMove[0]*0.1, 0.0, 1.0, 0.0)
 
-    glMultMatrixf(viewMatrix)
-    viewMatrix = glGetFloatv(GL_MODELVIEW_MATRIX)
 
-    glPopMatrix()
-    glMultMatrixf(viewMatrix)
+    
+    viewMatrix = np.matmul(Translation(cur_pos[0], 0, cur_pos[1]), Rotate(0, up_down_mouseMove * 0.1, mouseMove[0] * 0.1))
+    viewMatrix = np.matmul(Perspective(np.pi / 4), viewMatrix)
     
     glUniformMatrix4fv(view_matrix, 1, GL_FALSE, viewMatrix)
     
     
-    glPushMatrix()
-    
     glDrawArrays(GL_TRIANGLES, 0, 6) #last variable is number of points of triangles
     
-    glPopMatrix()
 
     pygame.display.flip()
     pygame.time.wait(10)
