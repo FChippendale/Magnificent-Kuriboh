@@ -1,0 +1,169 @@
+import numpy as np
+import pygame
+import sys
+import winsound
+
+#frequency = 440  # Set Frequency To 2500 Hertz
+#duration = 100  # Set Duration To 1000 ms == 1 second
+#winsound.Beep(frequency, duration)
+
+from pygame.locals import *
+
+from OpenGL.GL import *
+from OpenGL.GLU import *
+
+
+surfaces = []
+
+def ReadMap():
+    level_layout =  open('level_layout.txt', 'r')
+    row = level_layout.readline()
+    h, w = [int(s) for s in row.split(' ')]
+    for i in range(h):
+        surfaces.append(((i*2, 0, -1), (i*2, 0, 1), (i * 2 + 2, 0, 1), (i * 2 + 2, 0, -1), 0))
+        surfaces.append(((i*2, w*2, -1), (i*2, w*2, 1), (i * 2 + 2, w*2, 1), (i * 2 + 2, w*2, -1), 0))
+        
+    for i in range(w):
+        surfaces.append(((0, i*2, -1), (0, i*2, 1), (0, i*2+2, 1), (0, i * 2 + 2, -1), 0))
+        surfaces.append(((h*2, i*2, -1), (h*2, i*2, 1), (h*2, i*2+2, 1), (h*2, i * 2 + 2, -1), 0))
+    
+    digital_map = np.zeros((h, w))
+    for i in range(h):
+        row = level_layout.readline()
+        digital_map[i] = [int(ii) for ii in row[:-2].split(' ')]
+    
+    for i in range(h):
+        for ii in range(1, w):
+            if digital_map[i][ii - 1] != digital_map[i][ii]:
+                surfaces.append(((i * 2 + 2, ii * 2, -1), (i * 2 + 2, ii * 2, 1), (i * 2, ii * 2, 1), (i * 2, ii * 2, -1), 1))
+    
+    for ii in range(w):
+        for i in range(1, h):
+            if digital_map[i][ii] != digital_map[i - 1][ii]:
+                surfaces.append(((i * 2, ii * 2 + 2, -1), (i * 2, ii * 2 + 2, 1), (i * 2, ii * 2, 1), (i * 2, ii * 2, -1), 1))
+    
+
+
+gl_colors = (
+    (0, 0, 1),
+    (0, 1, 0),
+    (1, 0, 0)
+)
+
+texture_edges = (
+    (0, 0),
+    (0, 1),
+    (1, 1),
+    (1, 0)
+)
+
+def Cube():
+    glBegin(GL_QUADS)
+    for surface in surfaces:
+        glColor3fv(gl_colors[surface[-1]])
+        for ii, vertex in enumerate(surface[:-1]):
+            glTexCoord2fv(texture_edges[ii])
+            glVertex3fv(vertex)
+    glEnd()
+    
+    
+def loadImage():
+    img = pygame.image.load("Texture_Test.png")
+    textureData = pygame.image.tostring(img, "RGB", 1)
+    width = img.get_width()
+    height = img.get_height()
+    bgImgGL = glGenTextures(1)
+    glBindTexture(GL_TEXTURE_2D, bgImgGL)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, textureData)
+    glEnable(GL_TEXTURE_2D)
+    
+
+pygame.init()
+display = (800, 600)
+screen = pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
+
+glEnable(GL_DEPTH_TEST)
+
+glMatrixMode(GL_PROJECTION)
+gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
+
+glMatrixMode(GL_MODELVIEW)
+gluLookAt(0, -8, 0, 0, 0, 0, 0, 0, 1) #(first 3 are starting pos, second three are reference point, third three are direction of 'up')
+viewMatrix = glGetFloatv(GL_MODELVIEW_MATRIX)
+glLoadIdentity()
+
+loadImage()
+ReadMap()
+
+pygame.event.get()
+pygame.mouse.get_rel()
+pygame.mouse.set_visible(0)
+pygame.event.set_grab(1)
+
+mouseMove = (0, 0)
+prev_mouseMove = (0, 0)
+up_down_mouseMove = 0
+
+cur_pos = [0, -8] #X Z
+
+while True:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT: pygame.quit(); sys.exit()
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE: pygame.quit(), sys.exit()
+        if event.type == pygame.MOUSEMOTION:
+            mouseMove = event.rel
+            
+            
+               
+    if mouseMove[0] == prev_mouseMove[0]:
+        mouseMove = (0, mouseMove[1])
+    if mouseMove[1] == prev_mouseMove[1]:
+        mouseMove = (mouseMove[0], 0)    
+    up_down_mouseMove += mouseMove[1]
+        
+    prev_mouseMove = mouseMove
+    
+    keypress = pygame.key.get_pressed() 
+    glLoadIdentity() 
+    
+    glRotatef(up_down_mouseMove*0.1, 1.0, 0.0, 0.0)
+
+    # init the view matrix
+    glPushMatrix()
+    glLoadIdentity()
+
+    # apply the movment 
+    if keypress[pygame.K_w]:
+        cur_pos[1] += 0.1
+        glTranslatef(0,0,0.1)
+    if keypress[pygame.K_s]:
+        cur_pos[1] -= 0.1
+        glTranslatef(0,0,-0.1)
+    if keypress[pygame.K_d]:
+        cur_pos[0] += 0.1
+        glTranslatef(-0.1,0,0)
+    if keypress[pygame.K_a]:
+        cur_pos[0] -= 0.1
+        glTranslatef(0.1,0,0)
+    
+    glRotatef(mouseMove[0]*0.1, 0.0, 1.0, 0.0)
+
+    glMultMatrixf(viewMatrix)
+    viewMatrix = glGetFloatv(GL_MODELVIEW_MATRIX)
+
+    glPopMatrix()
+    glMultMatrixf(viewMatrix)
+
+    
+    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
+
+    glPushMatrix()
+    
+    Cube()
+    
+    glPopMatrix()
+
+    pygame.display.flip()
+    pygame.time.wait(10)
